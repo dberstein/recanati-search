@@ -73,14 +73,15 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 func main() {
 	library := doc.NewFileLibrary(os.Args[1:]...)
 
-	// search term from stdin
-	search := readLine(os.Stdin)
-
-	fmt.Println("Search:", search)
-	fmt.Println("Found:", library.Search(search))
+	stat, _ := os.Stdin.Stat()
+	if (stat.Mode() & os.ModeCharDevice) == 0 {
+		search := readLine(os.Stdin) // search term from stdin
+		fmt.Println("Search:", search)
+		fmt.Println("Found:", library.Search(search))
+	}
 
 	mux := setupRouter(library)
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:8080", mux); err != nil {
 		log.Fatal(err)
 	}
 }
