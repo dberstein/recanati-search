@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"example/doc"
+	"github.com/dberstein/recanati-search/doc"
 )
 
 func readLine(r io.Reader) string {

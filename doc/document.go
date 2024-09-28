@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"example/trie"
+	"github.com/dberstein/recanati-search/trie"
 )
 
 type Document struct {
