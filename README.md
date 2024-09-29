@@ -22,9 +22,9 @@ The indexing system should update dynamically as new documents are added or remo
 
 ### Endpoints:
 
-`POST /documents`: To upload a text document.
-`GET /documents/search?query=your_query`: To search for a word or phrase across all documents. Return a list of document IDs where the search term appears.
-`DELETE /documents/:id`: To remove a document by its ID from the system.
+- `POST /documents`: To upload a text document.
+- `GET /documents/search?query=your_query`: To search for a word or phrase across all documents. Return a list of document IDs where the search term appears.
+- `DELETE /documents/:id`: To remove a document by its ID from the system.
 
 ### Constraints:
 
