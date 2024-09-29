@@ -41,7 +41,7 @@ func (t *Trie) Add(v string) *Trie {
 	return t
 }
 
-func (t *Trie) Search(q string) bool {
+func (t *Trie) SearchPrefix(q string) bool {
 	word := strings.ToLower(strings.ReplaceAll(q, " ", ""))
 	current := t.root
 	for i := 0; i < len(word); i++ {

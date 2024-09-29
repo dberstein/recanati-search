@@ -39,10 +39,6 @@ func NewFileDocument(fname string) *Document {
 	return NewDocument(f)
 }
 
-func (d *Document) Search(q string) bool {
-	return d.T.Search(q)
-}
-
 func (d *Document) Delete() error {
 	// for _, w := range getWordsSorted() {
 	// 	d.T.Delete(w)

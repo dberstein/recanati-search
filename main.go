@@ -89,7 +89,7 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 		mu.RLock()
 		defer mu.RUnlock()
 
-		res := library.Search(search)
+		res := library.SearchPrefix(search)
 		bs, err := json.Marshal(res)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -108,7 +108,7 @@ func main() {
 	if (stat.Mode() & os.ModeCharDevice) == 0 {
 		search := readLine(os.Stdin) // search term from stdin
 		fmt.Println("Search:", search)
-		fmt.Println("Found:", library.Search(search))
+		fmt.Println("Found:", library.SearchPrefix(search))
 	}
 
 	mux := setupRouter(library)

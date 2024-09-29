@@ -42,11 +42,11 @@ func (lb *Library) AddFile(fname string) *Document {
 	return d
 }
 
-func (lb *Library) Search(q string) []string {
+func (lb *Library) SearchPrefix(q string) []string {
 	res := []string{}
 
 	for _, d := range lb.Docs {
-		if !d.Search(q) {
+		if !d.T.SearchPrefix(q) {
 			continue
 		}
 		res = append(res, d.ID)
