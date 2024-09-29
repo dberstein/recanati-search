@@ -21,7 +21,7 @@ func NewDocument(r io.Reader) *Document {
 	}
 
 	d := &Document{
-		ID:      GetID(content),
+		ID:      Sha256(content),
 		Content: string(content),
 		T:       trie.NewTrie(),
 	}
@@ -41,4 +41,11 @@ func NewFileDocument(fname string) *Document {
 
 func (d *Document) Search(q string) bool {
 	return d.T.Search(q)
+}
+
+func (d *Document) Delete() error {
+	// for _, w := range getWordsSorted() {
+	// 	d.T.Delete(w)
+	// }
+	return nil //d.T.Delete()
 }

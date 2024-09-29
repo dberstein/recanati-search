@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-func GetID(content []byte) string {
+func Sha256(content []byte) string {
 	h := sha256.New()
 	h.Write(content)
 	bs := h.Sum(nil)
