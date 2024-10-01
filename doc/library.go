@@ -23,7 +23,7 @@ func NewFileLibrary(fname ...string) *Library {
 
 func (lb *Library) Add(r io.Reader) *Document {
 	d := NewDocument(r)
-	d.T.InsertContentWords(strings.NewReader(d.Content))
+	d.T.InsertWords(strings.NewReader(d.Content))
 	lb.Docs[d.ID] = d
 	return d
 }
@@ -36,7 +36,7 @@ func (lb *Library) AddFile(fname string) *Document {
 	defer f.Close()
 
 	d := NewFileDocument(fname)
-	d.T.InsertContentWords(f)
+	d.T.InsertWords(f)
 	lb.Docs[d.ID] = d
 
 	return d
@@ -53,4 +53,12 @@ func (lb *Library) SearchPrefix(q string) []string {
 	}
 
 	return res
+}
+
+func (lb *Library) Delete(key string) bool {
+	if _, ok := lb.Docs[key]; ok {
+		delete(lb.Docs, key)
+		return true
+	}
+	return false
 }

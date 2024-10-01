@@ -8,14 +8,14 @@ import (
 )
 
 type Node struct {
-	c map[byte]*Node
-	v any
+	c map[rune]*Node
+	v rune
 }
 
-func NewNode(v any) *Node {
+func NewNode(v rune) *Node {
 	return &Node{
 		v: v,
-		c: make(map[byte]*Node),
+		c: make(map[rune]*Node),
 	}
 }
 
@@ -25,35 +25,27 @@ type Trie struct {
 
 func NewTrie() *Trie {
 	return &Trie{
-		root: NewNode(""),
+		root: NewNode('.'),
 	}
 }
 
 func (t *Trie) Add(v string) *Trie {
 	current := t.root
-	word := strings.ToLower(strings.ReplaceAll(v, " ", ""))
-	for i := 0; i < len(word); i++ {
-		if _, ok := current.c[word[i]]; !ok {
-			current.c[word[i]] = NewNode(string(word[i]))
+	for _, r := range strings.ToLower(strings.ReplaceAll(v, " ", "")) {
+		if _, ok := current.c[r]; !ok {
+			current.c[r] = NewNode(r)
 		}
-		current = current.c[word[i]]
+		current = current.c[r]
 	}
 	return t
 }
 
-func (t *Trie) SearchPrefix(q string) bool {
-	word := strings.ToLower(strings.ReplaceAll(q, " ", ""))
-	current := t.root
-	for i := 0; i < len(word); i++ {
-		if current == nil || current.c[word[i]] == nil {
-			return false
-		}
-		current = current.c[word[i]]
-	}
-	return true
+func (t *Trie) Delete(key string) *Trie {
+	// todo: delete from trie, ie. t.c[key]
+	return t
 }
 
-func (t *Trie) InsertContentWords(r io.Reader) *Trie {
+func (t *Trie) InsertWords(r io.Reader) *Trie {
 	s := bufio.NewScanner(r)
 	s.Split(bufio.ScanWords)
 
@@ -65,4 +57,16 @@ func (t *Trie) InsertContentWords(r io.Reader) *Trie {
 	}
 
 	return t
+}
+
+func (t *Trie) SearchPrefix(q string) bool {
+	current := t.root
+	for _, r := range strings.ToLower(strings.ReplaceAll(q, " ", "")) {
+		if current == nil || current.c[r] == nil {
+			return false
+		}
+		current = current.c[r]
+
+	}
+	return true
 }

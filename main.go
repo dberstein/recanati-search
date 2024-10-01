@@ -70,11 +70,9 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 		mu.Lock()
 		defer mu.Unlock()
 
-		if _, ok := library.Docs[id]; ok {
-			delete(library.Docs, id)
-			return
+		if !library.Delete(id) {
+			http.Error(w, "document not found", http.StatusNotFound)
 		}
-		http.Error(w, "document not found", http.StatusNotFound)
 		return
 	})
 
