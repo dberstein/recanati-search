@@ -1,31 +1,51 @@
 package main
 
 import (
-	"bufio"
+	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"strings"
-	"sync"
+	"strconv"
 
-	"github.com/dberstein/recanati-search/doc"
+	_ "github.com/mattn/go-sqlite3" // Import driver (blank import for registration)
 )
 
-func readLine(r io.Reader) string {
-	s := bufio.NewScanner(r)
-	s.Split(bufio.ScanLines)
-	for s.Scan() {
-		return s.Text()
+func ensureSchema(db *sql.DB) error {
+	if _, err := db.Exec(
+		"CREATE VIRTUAL TABLE IF NOT EXISTS docs USING FTS5(body);",
+	); err != nil {
+		return err
 	}
-	return ""
+	return nil
 }
 
-func setupRouter(library *doc.Library) *http.ServeMux {
+func NewDb(dsn string) *sql.DB {
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err = db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+
+	err = ensureSchema(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return db
+}
+
+var db *sql.DB
+
+func init() {
+	db = NewDb(":memory:")
+}
+
+func setupRouter() *http.ServeMux {
 	mux := http.NewServeMux()
-	mu := sync.RWMutex{}
 
 	// Create new document
 	mux.HandleFunc("POST /doc", func(w http.ResponseWriter, r *http.Request) {
@@ -35,45 +55,38 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 			return
 		}
 
-		contentId := doc.Sha256(bs)
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		d, ok := library.Docs[contentId]
-		if !ok {
-			d = library.Add(strings.NewReader(string(bs)))
+		res, err := db.Exec("INSERT INTO docs (body) VALUES (?)", bs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 
-		w.Write([]byte(d.ID))
+		docId, err := res.LastInsertId()
+		w.Write([]byte(strconv.FormatInt(docId, 10)))
 	})
 
 	// Retrieve document
 	mux.HandleFunc("GET /doc/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-
-		mu.RLock()
-		defer mu.RUnlock()
-
-		d, ok := library.Docs[id]
-		if !ok {
-			http.Error(w, "document not found", http.StatusNotFound)
-			return
+		var body string
+		err := db.QueryRow(
+			"SELECT body FROM docs WHERE rowid = ?", r.PathValue("id")).Scan(&body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		w.Write([]byte(d.Content))
+		w.Write([]byte(body))
 	})
 
 	// Delete document
 	mux.HandleFunc("DELETE /doc/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		if !library.Delete(id) {
-			http.Error(w, "document not found", http.StatusNotFound)
+		res, err := db.Exec("DELETE FROM docs WHERE rowid = ?", r.PathValue("id"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
+		affected, err := res.RowsAffected()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.Write([]byte(strconv.FormatInt(affected, 10)))
 	})
 
 	// Search documents
@@ -84,15 +97,31 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 			return
 		}
 
-		mu.RLock()
-		defer mu.RUnlock()
-
-		res := library.SearchPrefix(search)
-		bs, err := json.Marshal(res)
+		rows, err := db.Query("SELECT rowid, body FROM docs WHERE body MATCH ?", search)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer rows.Close()
+
+		var docIds []int64
+		for rows.Next() {
+			var id int64
+			var body string
+
+			err = rows.Scan(&id, &body)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			docIds = append(docIds, id)
 		}
 
+		bs, err := json.Marshal(docIds)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.Write(bs)
 	})
 
@@ -100,16 +129,7 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 }
 
 func main() {
-	library := doc.NewFileLibrary(os.Args[1:]...)
-
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		search := readLine(os.Stdin) // search term from stdin
-		fmt.Println("Search:", search)
-		fmt.Println("Found:", library.SearchPrefix(search))
-	}
-
-	mux := setupRouter(library)
+	mux := setupRouter()
 	if err := http.ListenAndServe("0.0.0.0:8080", mux); err != nil {
 		log.Fatal(err)
 	}

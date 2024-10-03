@@ -38,10 +38,10 @@ Return search results sorted by relevance score.
 
 ### Endpoints:
 
-- `POST /documents`: Upload a new text document.
-- `GET /documents/search?query=your_query&proximity=x`: Search for documents containing the query. Optionally, if a proximity parameter is provided, return documents where the terms appear within the specified proximity.
-- `GET /documents/search?query=your_query&synonyms=true`: Search for documents including both the query and its synonyms.
-- `DELETE /documents/:id`: Remove a document by its ID from the system.
+- `POST /doc`: Upload a new text document.
+- `GET /doc/search?q=your_query&proximity=x`: Search for documents containing the query. Optionally, if a proximity parameter is provided, return documents where the terms appear within the specified proximity.
+- `GET /doc/search?q=your_query&synonyms=true`: Search for documents including both the query and its synonyms.
+- `DELETE /doc/:id`: Remove a document by its ID from the system.
 Error Handling and Edge Cases:
 
 Handle cases where no documents match the search.
