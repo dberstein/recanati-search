@@ -97,7 +97,8 @@ func setupRouter() *http.ServeMux {
 			return
 		}
 
-		rows, err := db.Query("SELECT rowid, body FROM docs WHERE body MATCH ?", search)
+		rows, err := db.Query(
+			"SELECT rowid, body FROM docs WHERE body MATCH ? ORDER BY rank", search)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
