@@ -39,19 +39,20 @@ Return search results sorted by relevance score.
 ### Endpoints:
 
 - `POST /doc`: Upload a new text document.
-- `GET /doc/search?q=your_query&proximity=x`: Search for documents containing the query. Optionally, if a proximity parameter is provided, return documents where the terms appear within the specified proximity.
-- `GET /doc/search?q=your_query&synonyms=true`: Search for documents including both the query and its synonyms.
+- `GET /doc/search?q=your_query[&proximity=x]`: Search for documents containing the query. Optionally, if a proximity parameter is provided, return documents where the terms appear within the specified proximity. **See `https://www.sqlite.org/fts5.html` for query syntax.**
+- `GET /doc/search?q=your_query[&synonyms=true]`: Search for documents including both the query and its synonyms. **Not implemented.**
 - `DELETE /doc/:id`: Remove a document by its ID from the system.
 Error Handling and Edge Cases:
 
 Handle cases where no documents match the search.
 Handle very large documents and ensure the system does not run out of memory.
 Ensure that the indexing system is updated correctly when documents are added, updated, or deleted.
-Advanced Features (Optional):
 
-Add support for wildcard searches (e.g., searching for “dev*” would return documents containing “developer,” “development,” etc.).
-Implement fuzzy search to account for minor misspellings or typos in the query (e.g., searching for "color" should return results with "colour").
-Add a time complexity analysis for various operations like search, add, and delete, to reflect on efficiency.
+### Advanced Features (Optional):
+
+- Add support for wildcard searches (e.g., searching for “dev*” would return documents containing “developer,” “development,” etc.).
+- Implement fuzzy search to account for minor misspellings or typos in the query (e.g., searching for "color" should return results with "colour").
+- Add a time complexity analysis for various operations like search, add, and delete, to reflect on efficiency.
 
 ### Recording and Reflection:
 
