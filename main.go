@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -43,11 +44,8 @@ func NewDb(dsn string) *sql.DB {
 
 var db *sql.DB
 
-func init() {
-	db = NewDb(":memory:")
-}
-
-func setupRouter() *http.ServeMux {
+func setupRouter(dsn string) *http.ServeMux {
+	db = NewDb(dsn)
 	mux := http.NewServeMux()
 
 	// Create new document
@@ -93,6 +91,12 @@ func setupRouter() *http.ServeMux {
 		affected, err := res.RowsAffected()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		if affected == 0 {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
 		}
 		w.Write([]byte(strconv.FormatInt(affected, 10)))
 	})
@@ -198,7 +202,10 @@ func requestGetRemoteAddress(r *http.Request) string {
 }
 
 func main() {
-	mux := setupRouter()
+	dsn := flag.String("dsn", ":memory:", "Sqlite DSN")
+	flag.Parse()
+
+	mux := setupRouter(*dsn)
 	if err := http.ListenAndServe("0.0.0.0:8080", logRequestHandler(mux)); err != nil {
 		log.Fatal(err)
 	}
