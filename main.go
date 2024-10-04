@@ -158,15 +158,12 @@ func logRequestHandler(h http.Handler) http.Handler {
 		recorder := &statusRecorder{w, 200}
 		h.ServeHTTP(recorder, r)
 
-		ua, _ := r.Header["User-Agent"]
-		statusCode := recorder.statusCode
-
 		log.Print(strings.Join([]string{
-			requestGetRemoteAddress(r),
-			strconv.Itoa(statusCode),
+			getRemoteAddress(r),
+			strconv.Itoa(recorder.statusCode),
 			r.Method,
-			fmt.Sprintf("\"%s\"", r.URL),
-			fmt.Sprintf("\"%s\"", ua),
+			"\"" + r.URL.String() + "\"",
+			"\"" + r.Header.Get("User-Agent") + "\"",
 			fmt.Sprintf("(%s)", time.Now().Sub(start)),
 		}, " "))
 	}
@@ -182,7 +179,7 @@ func ipAddrFromRemoteAddr(s string) string {
 	return s[:idx]
 }
 
-func requestGetRemoteAddress(r *http.Request) string {
+func getRemoteAddress(r *http.Request) string {
 	hdr := r.Header
 	hdrRealIP := hdr.Get("X-Real-Ip")
 	hdrForwardedFor := hdr.Get("X-Forwarded-For")
