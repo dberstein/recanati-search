@@ -68,7 +68,16 @@ func setupRouter(dsn string) *http.ServeMux {
 			return
 		}
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(strconv.FormatInt(docId, 10)))
+		bs, err = json.Marshal(struct {
+			Document int64 `json:"document"`
+		}{
+			Document: docId,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write(bs)
 	})
 
 	// Retrieve document
@@ -98,7 +107,15 @@ func setupRouter(dsn string) *http.ServeMux {
 		} else {
 			w.WriteHeader(http.StatusOK)
 		}
-		w.Write([]byte(strconv.FormatInt(affected, 10)))
+		bs, err := json.Marshal(struct {
+			Deleted int64 `json:"deleted"`
+		}{
+			Deleted: affected,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.Write(bs)
 	})
 
 	// Search documents
@@ -117,7 +134,7 @@ func setupRouter(dsn string) *http.ServeMux {
 		}
 		defer rows.Close()
 
-		var docIds []int64
+		var docIds []int64 = []int64{}
 		for rows.Next() {
 			var id int64
 			var body string
@@ -130,7 +147,11 @@ func setupRouter(dsn string) *http.ServeMux {
 			docIds = append(docIds, id)
 		}
 
-		bs, err := json.Marshal(docIds)
+		bs, err := json.Marshal(struct {
+			Matches []int64 `json:"matches"`
+		}{
+			Matches: docIds,
+		})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
