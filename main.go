@@ -3,10 +3,13 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3" // Import driver (blank import for registration)
 )
@@ -62,6 +65,11 @@ func setupRouter() *http.ServeMux {
 		}
 
 		docId, err := res.LastInsertId()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte(strconv.FormatInt(docId, 10)))
 	})
 
@@ -71,7 +79,7 @@ func setupRouter() *http.ServeMux {
 		err := db.QueryRow(
 			"SELECT body FROM docs WHERE rowid = ?", r.PathValue("id")).Scan(&body)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusNotFound)
 		}
 		w.Write([]byte(body))
 	})
@@ -129,9 +137,69 @@ func setupRouter() *http.ServeMux {
 	return mux
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rec *statusRecorder) WriteHeader(statusCode int) {
+	rec.statusCode = statusCode
+	rec.ResponseWriter.WriteHeader(statusCode)
+}
+
+func logRequestHandler(h http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		recorder := &statusRecorder{w, 200}
+		h.ServeHTTP(recorder, r)
+
+		ua, _ := r.Header["User-Agent"]
+		statusCode := recorder.statusCode
+
+		log.Print(strings.Join([]string{
+			requestGetRemoteAddress(r),
+			strconv.Itoa(statusCode),
+			r.Method,
+			fmt.Sprintf("\"%s\"", r.URL),
+			fmt.Sprintf("\"%s\"", ua),
+			fmt.Sprintf("(%s)", time.Now().Sub(start)),
+		}, " "))
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func ipAddrFromRemoteAddr(s string) string {
+	idx := strings.LastIndex(s, ":")
+	if idx == -1 {
+		return s
+	}
+	return s[:idx]
+}
+
+func requestGetRemoteAddress(r *http.Request) string {
+	hdr := r.Header
+	hdrRealIP := hdr.Get("X-Real-Ip")
+	hdrForwardedFor := hdr.Get("X-Forwarded-For")
+	if hdrRealIP == "" && hdrForwardedFor == "" {
+		return ipAddrFromRemoteAddr(r.RemoteAddr)
+	}
+	if hdrForwardedFor != "" {
+		// X-Forwarded-For is potentially a list of addresses separated with ","
+		parts := strings.Split(hdrForwardedFor, ",")
+		for i, p := range parts {
+			parts[i] = strings.TrimSpace(p)
+		}
+		// TODO: should return first non-local address
+		return parts[0]
+	}
+	return hdrRealIP
+}
+
 func main() {
 	mux := setupRouter()
-	if err := http.ListenAndServe("0.0.0.0:8080", mux); err != nil {
+	if err := http.ListenAndServe("0.0.0.0:8080", logRequestHandler(mux)); err != nil {
 		log.Fatal(err)
 	}
 }
