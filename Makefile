@@ -1,4 +1,7 @@
+SRC := ./...
+BIN := searchd
+
 run:
-	@go run --tags fts5 main.go
+	@go run --tags fts5 $(SRC)
 build:
-	@go build --tags fts5 -o searchd main.go
+	@go build --tags fts5 -o $(BIN) $(SRC)
