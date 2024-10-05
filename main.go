@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
+
 	_ "github.com/mattn/go-sqlite3" // Import driver (blank import for registration)
 )
 
@@ -180,16 +182,27 @@ func logRequestHandler(h http.Handler) http.Handler {
 		h.ServeHTTP(recorder, r)
 
 		log.Print(strings.Join([]string{
-			getRemoteAddress(r),
-			strconv.Itoa(recorder.statusCode),
-			r.Method,
-			"\"" + r.URL.String() + "\"",
-			"\"" + r.Header.Get("User-Agent") + "\"",
-			fmt.Sprintf("(%s)", time.Now().Sub(start)),
+			color.MagentaString(getRemoteAddress(r)),
+			getColorCode(recorder.statusCode),
+			color.YellowString(r.Method),
+			"\"" + color.CyanString(r.URL.String()) + "\"",
+			"\"" + color.BlueString(r.Header.Get("User-Agent")) + "\"",
+			time.Now().Sub(start).String(),
 		}, " "))
 	}
 
 	return http.HandlerFunc(fn)
+}
+
+func getColorCode(code int) string {
+	colorFn := color.GreenString
+	if code > 399 {
+		colorFn = color.YellowString
+	}
+	if code > 499 {
+		colorFn = color.RedString
+	}
+	return colorFn(strconv.Itoa(code))
 }
 
 func ipAddrFromRemoteAddr(s string) string {
@@ -221,10 +234,21 @@ func getRemoteAddress(r *http.Request) string {
 
 func main() {
 	dsn := flag.String("dsn", ":memory:", "Sqlite DSN")
+	port := flag.Int("port", 8080, "Listen port")
 	flag.Parse()
 
 	mux := setupRouter(*dsn)
-	if err := http.ListenAndServe("0.0.0.0:8080", logRequestHandler(mux)); err != nil {
-		log.Fatal(err)
+	addr := "0.0.0.0:" + strconv.Itoa(*port)
+
+	srv := &http.Server{
+		Addr:           addr,
+		IdleTimeout:    0,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		MaxHeaderBytes: 1 << 20,
+		Handler:        logRequestHandler(mux),
 	}
+
+	fmt.Println(color.GreenString("Listening:"), color.YellowString(addr))
+	log.Fatal(srv.ListenAndServe())
 }
