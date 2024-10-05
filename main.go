@@ -69,6 +69,7 @@ func setupRouter(dsn string) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		bs, err = json.Marshal(struct {
 			Document int64 `json:"document"`
@@ -104,6 +105,7 @@ func setupRouter(dsn string) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
+		w.Header().Add("Content-Type", "application/json")
 		if affected == 0 {
 			w.WriteHeader(http.StatusNotFound)
 		} else {
@@ -149,6 +151,7 @@ func setupRouter(dsn string) *http.ServeMux {
 			docIds = append(docIds, id)
 		}
 
+		w.Header().Add("Content-Type", "application/json")
 		bs, err := json.Marshal(struct {
 			Matches []int64 `json:"matches"`
 		}{
