@@ -183,6 +183,9 @@ func (rec *statusRecorder) WriteHeader(statusCode int) {
 }
 
 func logRequestHandler(h http.Handler) http.Handler {
+	fgColorRed := color.New(color.FgRed)
+	bgWhiteFgColorRed := fgColorRed.Add(color.BgWhite)
+
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -191,11 +194,11 @@ func logRequestHandler(h http.Handler) http.Handler {
 
 		log.Print(strings.Join([]string{
 			color.MagentaString(r.Host),
-			getRemoteAddress(r),
-			getColorCode(recorder.statusCode),
+			bgWhiteFgColorRed.Sprint(getRemoteAddress(r)),
+			getColoredStatusCode(recorder.statusCode),
 			r.Method,
 			"\"" + color.CyanString(r.URL.String()) + "\"",
-			"\"" + color.BlueString(r.Header.Get("User-Agent")) + "\"",
+			"\"" + color.CyanString(r.Header.Get("User-Agent")) + "\"",
 			time.Now().Sub(start).String(),
 		}, " "))
 	}
@@ -203,12 +206,14 @@ func logRequestHandler(h http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
-func getColorCode(code int) string {
-	colorFn := color.HiGreenString
-	if code > 499 {
+func getColoredStatusCode(code int) string {
+	var colorFn func(string, ...interface{}) string
+	if code < http.StatusMultipleChoices { // sucesses
+		colorFn = color.HiGreenString
+	} else if code < http.StatusInternalServerError { // client errors
+		colorFn = color.HiBlueString
+	} else { // server errors
 		colorFn = color.HiRedString
-	} else if code > 399 {
-		colorFn = color.HiYellowString
 	}
 	return colorFn(strconv.Itoa(code))
 }
