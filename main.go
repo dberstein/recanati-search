@@ -1,31 +1,55 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
+	"database/sql"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
+	"strconv"
 	"strings"
-	"sync"
+	"time"
 
-	"github.com/dberstein/recanati-search/doc"
+	"github.com/fatih/color"
+
+	_ "github.com/mattn/go-sqlite3" // Import driver (blank import for registration)
 )
 
-func readLine(r io.Reader) string {
-	s := bufio.NewScanner(r)
-	s.Split(bufio.ScanLines)
-	for s.Scan() {
-		return s.Text()
+func ensureSchema(db *sql.DB) error {
+	if _, err := db.Exec(
+		"CREATE VIRTUAL TABLE IF NOT EXISTS docs USING FTS5(body);",
+	); err != nil {
+		return err
 	}
-	return ""
+	return nil
 }
 
-func setupRouter(library *doc.Library) *http.ServeMux {
+func NewDb(dsn string) *sql.DB {
+	db, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err = db.Ping(); err != nil {
+		log.Fatal(err)
+	}
+
+	err = ensureSchema(db)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return db
+}
+
+var db *sql.DB
+
+func setupRouter(dsn string) *http.ServeMux {
+	db = NewDb(dsn)
 	mux := http.NewServeMux()
-	mu := sync.RWMutex{}
 
 	// Create new document
 	mux.HandleFunc("POST /doc", func(w http.ResponseWriter, r *http.Request) {
@@ -34,46 +58,73 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		contentId := doc.Sha256(bs)
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		d, ok := library.Docs[contentId]
-		if !ok {
-			d = library.Add(strings.NewReader(string(bs)))
+		if len(bytes.TrimSpace(bs)) == 0 {
+			http.Error(w, "empty document", http.StatusBadRequest)
+			return
 		}
 
-		w.Write([]byte(d.ID))
+		res, err := db.Exec("INSERT INTO docs (body) VALUES (?)", bs)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		docId, err := res.LastInsertId()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		bs, err = json.Marshal(struct {
+			Document int64 `json:"document"`
+		}{
+			Document: docId,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Write(bs)
 	})
 
 	// Retrieve document
 	mux.HandleFunc("GET /doc/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-
-		mu.RLock()
-		defer mu.RUnlock()
-
-		d, ok := library.Docs[id]
-		if !ok {
-			http.Error(w, "document not found", http.StatusNotFound)
-			return
+		var body string
+		err := db.QueryRow(
+			"SELECT body FROM docs WHERE rowid = ?", r.PathValue("id")).Scan(&body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
 		}
-		w.Write([]byte(d.Content))
+		w.Write([]byte(body))
 	})
 
 	// Delete document
 	mux.HandleFunc("DELETE /doc/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id := r.PathValue("id")
-
-		mu.Lock()
-		defer mu.Unlock()
-
-		if !library.Delete(id) {
-			http.Error(w, "document not found", http.StatusNotFound)
+		res, err := db.Exec("DELETE FROM docs WHERE rowid = ?", r.PathValue("id"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		return
+		affected, err := res.RowsAffected()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+
+		w.Header().Add("Content-Type", "application/json")
+		if affected == 0 {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+		bs, err := json.Marshal(struct {
+			Deleted int64 `json:"deleted"`
+		}{
+			Deleted: affected,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		w.Write(bs)
 	})
 
 	// Search documents
@@ -84,33 +135,128 @@ func setupRouter(library *doc.Library) *http.ServeMux {
 			return
 		}
 
-		mu.RLock()
-		defer mu.RUnlock()
-
-		res := library.SearchPrefix(search)
-		bs, err := json.Marshal(res)
+		rows, err := db.Query(
+			"SELECT rowid, body FROM docs WHERE body MATCH ? ORDER BY rank", search)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer rows.Close()
+
+		var docIds []int64 = []int64{}
+		for rows.Next() {
+			var id int64
+			var body string
+
+			err = rows.Scan(&id, &body)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			docIds = append(docIds, id)
 		}
 
+		w.Header().Add("Content-Type", "application/json")
+		bs, err := json.Marshal(struct {
+			Matches []int64 `json:"matches"`
+		}{
+			Matches: docIds,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.Write(bs)
 	})
 
 	return mux
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rec *statusRecorder) WriteHeader(statusCode int) {
+	rec.statusCode = statusCode
+	rec.ResponseWriter.WriteHeader(statusCode)
+}
+
+func logRequestHandler(h http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		recorder := &statusRecorder{w, 200}
+		h.ServeHTTP(recorder, r)
+
+		log.Print(strings.Join([]string{
+			color.MagentaString(getRemoteAddress(r)),
+			getColorCode(recorder.statusCode),
+			r.Method,
+			"\"" + color.CyanString(r.URL.String()) + "\"",
+			"\"" + color.BlueString(r.Header.Get("User-Agent")) + "\"",
+			time.Now().Sub(start).String(),
+		}, " "))
+	}
+
+	return http.HandlerFunc(fn)
+}
+
+func getColorCode(code int) string {
+	colorFn := color.HiGreenString
+	if code > 499 {
+		colorFn = color.HiRedString
+	} else if code > 399 {
+		colorFn = color.HiYellowString
+	}
+	return colorFn(strconv.Itoa(code))
+}
+
+func ipAddrFromRemoteAddr(s string) string {
+	idx := strings.LastIndex(s, ":")
+	if idx == -1 {
+		return s
+	}
+	return s[:idx]
+}
+
+func getRemoteAddress(r *http.Request) string {
+	hdr := r.Header
+	hdrRealIP := hdr.Get("X-Real-Ip")
+	hdrForwardedFor := hdr.Get("X-Forwarded-For")
+	if hdrRealIP == "" && hdrForwardedFor == "" {
+		return ipAddrFromRemoteAddr(r.RemoteAddr)
+	}
+	if hdrForwardedFor != "" {
+		// X-Forwarded-For is potentially a list of addresses separated with ","
+		parts := strings.Split(hdrForwardedFor, ",")
+		for i, p := range parts {
+			parts[i] = strings.TrimSpace(p)
+		}
+		// TODO: should return first non-local address
+		return parts[0]
+	}
+	return hdrRealIP
+}
+
 func main() {
-	library := doc.NewFileLibrary(os.Args[1:]...)
+	dsn := flag.String("dsn", ":memory:", "Sqlite DSN")
+	port := flag.Int("port", 8080, "Listen port")
+	flag.Parse()
 
-	stat, _ := os.Stdin.Stat()
-	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		search := readLine(os.Stdin) // search term from stdin
-		fmt.Println("Search:", search)
-		fmt.Println("Found:", library.SearchPrefix(search))
+	mux := setupRouter(*dsn)
+	addr := "0.0.0.0:" + strconv.Itoa(*port)
+
+	srv := &http.Server{
+		Addr:              addr,
+		IdleTimeout:       0,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1MB
+		Handler:           logRequestHandler(mux),
 	}
 
-	mux := setupRouter(library)
-	if err := http.ListenAndServe("0.0.0.0:8080", mux); err != nil {
-		log.Fatal(err)
-	}
+	fmt.Println(color.HiGreenString("Listening:"), addr)
+	log.Fatal(srv.ListenAndServe())
 }
