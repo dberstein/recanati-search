@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -226,6 +227,40 @@ func ipAddrFromRemoteAddr(s string) string {
 	return s[:idx]
 }
 
+var privateIPBlocks []*net.IPNet
+
+func init() {
+	for _, cidr := range []string{
+		"127.0.0.0/8",    // IPv4 loopback
+		"10.0.0.0/8",     // RFC1918
+		"172.16.0.0/12",  // RFC1918
+		"192.168.0.0/16", // RFC1918
+		"169.254.0.0/16", // RFC3927 link-local
+		"::1/128",        // IPv6 loopback
+		"fe80::/10",      // IPv6 link-local
+		"fc00::/7",       // IPv6 unique local addr
+	} {
+		_, block, err := net.ParseCIDR(cidr)
+		if err != nil {
+			panic(fmt.Errorf("parse error on %q: %v", cidr, err))
+		}
+		privateIPBlocks = append(privateIPBlocks, block)
+	}
+}
+
+func isPrivateIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return true
+	}
+
+	for _, block := range privateIPBlocks {
+		if block.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 func getRemoteAddress(r *http.Request) string {
 	hdr := r.Header
 	hdrRealIP := hdr.Get("X-Real-Ip")
@@ -237,10 +272,12 @@ func getRemoteAddress(r *http.Request) string {
 		// X-Forwarded-For is potentially a list of addresses separated with ","
 		parts := strings.Split(hdrForwardedFor, ",")
 		for i, p := range parts {
+			// Returns first non-private IP address...
 			parts[i] = strings.TrimSpace(p)
+			if !isPrivateIP(net.ParseIP(parts[i])) {
+				return parts[i]
+			}
 		}
-		// TODO: should return first non-local address
-		return parts[0]
 	}
 	return hdrRealIP
 }
