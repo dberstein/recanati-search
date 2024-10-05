@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"flag"
@@ -55,6 +56,10 @@ func setupRouter(dsn string) *http.ServeMux {
 		bs, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(bytes.TrimSpace(bs)) == 0 {
+			http.Error(w, "empty document", http.StatusBadRequest)
 			return
 		}
 
@@ -187,7 +192,7 @@ func logRequestHandler(h http.Handler) http.Handler {
 		log.Print(strings.Join([]string{
 			color.MagentaString(getRemoteAddress(r)),
 			getColorCode(recorder.statusCode),
-			color.YellowString(r.Method),
+			r.Method,
 			"\"" + color.CyanString(r.URL.String()) + "\"",
 			"\"" + color.BlueString(r.Header.Get("User-Agent")) + "\"",
 			time.Now().Sub(start).String(),
@@ -198,12 +203,11 @@ func logRequestHandler(h http.Handler) http.Handler {
 }
 
 func getColorCode(code int) string {
-	colorFn := color.GreenString
-	if code > 399 {
-		colorFn = color.YellowString
-	}
+	colorFn := color.HiGreenString
 	if code > 499 {
-		colorFn = color.RedString
+		colorFn = color.HiRedString
+	} else if code > 399 {
+		colorFn = color.HiYellowString
 	}
 	return colorFn(strconv.Itoa(code))
 }
@@ -244,14 +248,15 @@ func main() {
 	addr := "0.0.0.0:" + strconv.Itoa(*port)
 
 	srv := &http.Server{
-		Addr:           addr,
-		IdleTimeout:    0,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		MaxHeaderBytes: 1 << 20,
-		Handler:        logRequestHandler(mux),
+		Addr:              addr,
+		IdleTimeout:       0,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1MB
+		Handler:           logRequestHandler(mux),
 	}
 
-	fmt.Println(color.GreenString("Listening:"), color.YellowString(addr))
+	fmt.Println(color.HiGreenString("Listening:"), addr)
 	log.Fatal(srv.ListenAndServe())
 }
