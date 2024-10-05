@@ -190,7 +190,8 @@ func logRequestHandler(h http.Handler) http.Handler {
 		h.ServeHTTP(recorder, r)
 
 		log.Print(strings.Join([]string{
-			color.MagentaString(getRemoteAddress(r)),
+			color.MagentaString(r.Host),
+			getRemoteAddress(r),
 			getColorCode(recorder.statusCode),
 			r.Method,
 			"\"" + color.CyanString(r.URL.String()) + "\"",
