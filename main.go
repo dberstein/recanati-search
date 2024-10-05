@@ -75,8 +75,7 @@ func setupRouter(dsn string) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Add("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+
 		bs, err = json.Marshal(struct {
 			Document int64 `json:"document"`
 		}{
@@ -86,6 +85,9 @@ func setupRouter(dsn string) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
 		w.Write(bs)
 	})
 
@@ -111,12 +113,6 @@ func setupRouter(dsn string) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		w.Header().Add("Content-Type", "application/json")
-		if affected == 0 {
-			w.WriteHeader(http.StatusNotFound)
-		} else {
-			w.WriteHeader(http.StatusOK)
-		}
 		bs, err := json.Marshal(struct {
 			Deleted int64 `json:"deleted"`
 		}{
@@ -125,6 +121,13 @@ func setupRouter(dsn string) *http.ServeMux {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+
+		var statusCode int = http.StatusOK
+		if affected == 0 {
+			statusCode = http.StatusNotFound
+		}
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
 		w.Write(bs)
 	})
 
@@ -157,7 +160,6 @@ func setupRouter(dsn string) *http.ServeMux {
 			docIds = append(docIds, id)
 		}
 
-		w.Header().Add("Content-Type", "application/json")
 		bs, err := json.Marshal(struct {
 			Matches []int64 `json:"matches"`
 		}{
@@ -167,6 +169,7 @@ func setupRouter(dsn string) *http.ServeMux {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		w.Header().Add("Content-Type", "application/json")
 		w.Write(bs)
 	})
 
