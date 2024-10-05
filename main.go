@@ -247,14 +247,13 @@ func getRemoteAddress(r *http.Request) string {
 
 func main() {
 	dsn := flag.String("dsn", ":memory:", "Sqlite DSN")
-	port := flag.Int("port", 8080, "Listen port")
+	addr := flag.String("addr", ":8080", "Listen address")
 	flag.Parse()
 
 	mux := setupRouter(*dsn)
-	addr := "0.0.0.0:" + strconv.Itoa(*port)
 
 	srv := &http.Server{
-		Addr:              addr,
+		Addr:              *addr,
 		IdleTimeout:       0,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
@@ -263,6 +262,6 @@ func main() {
 		Handler:           logRequestHandler(mux),
 	}
 
-	fmt.Println(color.HiGreenString("Listening:"), addr)
+	fmt.Println(color.HiGreenString("Listening:"), *addr)
 	log.Fatal(srv.ListenAndServe())
 }
