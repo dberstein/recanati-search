@@ -16,6 +16,8 @@ import (
 
 	"github.com/fatih/color"
 
+	"github.com/dberstein/recanati-search/synonym"
+
 	_ "github.com/mattn/go-sqlite3" // Import driver (blank import for registration)
 )
 
@@ -47,6 +49,12 @@ func NewDb(dsn string) *sql.DB {
 }
 
 var db *sql.DB
+
+func init() {
+	synonym.Add("first", "1st")
+	synonym.Add("second", "2nd")
+	synonym.Add("third", "3rd")
+}
 
 func setupRouter(dsn string) *http.ServeMux {
 	db = NewDb(dsn)
@@ -137,6 +145,10 @@ func setupRouter(dsn string) *http.ServeMux {
 		if search == "" {
 			http.Error(w, "missing query", http.StatusBadRequest)
 			return
+		}
+
+		if "true" == r.URL.Query().Get("synonyms") {
+			search = synonym.ReplaceAll(search)
 		}
 
 		rows, err := db.Query(
