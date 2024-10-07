@@ -1,4 +1,4 @@
-SRC := ./...
+SRC := main.go
 BIN := searchd
 
 run:
